@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import httpx
 from loguru import logger
+from ddgs import DDGS
 
 from nanobot.agent.tools.base import Tool
 
@@ -70,6 +71,29 @@ class WebSearchTool(Tool):
         """Resolve API key at call time so env/config changes are picked up."""
         return self._init_api_key or os.environ.get("BRAVE_API_KEY", "")
 
+    def get_ddg_results(self, keywords, max_results=5):
+        results_list = []
+        
+        # 使用 DDGS 迭代器获取搜索结果
+        with DDGS() as ddgs:
+            # keywords: 搜索词
+            # region: 地区代码 (wt-wt 是全球, cn-zh 是中国)
+            # safesearch: 安全搜索级别 (on, moderate, off)
+            # timelimit: 时间限制 (d-天, w-周, m-月, y-年)
+            ddgs_gen = ddgs.text(
+                keywords, 
+                region="wt-wt", 
+                safesearch="moderate", 
+                timelimit=None, 
+                max_results=max_results
+            )
+            
+            for r in ddgs_gen:
+                results_list.append(r)
+            
+        # 返回原始列表而不是 JSON 字符串，这样调用者可以直接遍历
+        return results_list
+
     async def execute(self, query: str, count: int | None = None, **kwargs: Any) -> str:
         """ if not self.api_key:
             return (
@@ -90,8 +114,7 @@ class WebSearchTool(Tool):
                 )
                 r.raise_for_status() """
             # DuckDuckGo搜索接口（免费、无API Key）
-            print(f"using duckduckgo for query: {query} with count: {n}")
-            async with httpx.AsyncClient(proxy=self.proxy) as client:
+            """ async with httpx.AsyncClient(proxy=self.proxy) as client:
                 r = await client.get(
                     "https://api.duckduckgo.com/",
                     params={
@@ -105,20 +128,26 @@ class WebSearchTool(Tool):
                     headers={"User-Agent": USER_AGENT},  # 模拟浏览器请求
                     timeout=10.0
                 )
-                r.raise_for_status()
+                r.raise_for_status() """
 
+            print(f"using duckduckgo for query: {query} with count: {n}")
+            results = self.get_ddg_results(query, n)
             # 解析DuckDuckGo返回结果
-            results = r.json().get("web", {}).get("results", [])[:n]
-            print(f"duckduckgo returned: {results}")
+            # 在 get_ddg_results 改为返回列表之后, 这里的 results 直接就是一个可迭代的 list
             if not results:
                 return f"No results for: {query}"
-
-            lines = [f"Results for: {query}\n"]
-            for i, item in enumerate(results, 1):
-                lines.append(f"{i}. {item.get('title', '')}\n   {item.get('url', '')}")
-                if desc := item.get("description"):
-                    lines.append(f"   {desc}")
-            return "\n".join(lines)
+            else:
+                #print(f"duckduckgo returned: {results}")
+                lines = [f"Results for: {query}\n"]
+                # 遍历列表中的字典项
+                for i, item in enumerate(results):
+                    # item 本身是一个 dict, 可通过 key 访问 title, href, body 等字段
+                    lines.append(f"{i}. {item.get('title','')}\n   {item.get('href','')}")
+                    if desc := item.get("body"):
+                        lines.append(f"   {desc}")
+                # debug output for development
+                logger.debug("WebSearch results for '{}':\n{}", query, "\n".join(lines))
+                return "\n".join(lines)
         except httpx.ProxyError as e:
             logger.error("WebSearch proxy error: {}", e)
             return f"Proxy error: {e}"
