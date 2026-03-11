@@ -62,6 +62,8 @@ class WebSearchTool(Tool):
         self._init_api_key = api_key
         self.max_results = max_results
         self.proxy = proxy
+        print("WebSearchTool initialized with api_key:", self._init_api_key)
+        print("WebSearchTool initialized with proxy:", self.proxy)
 
     @property
     def api_key(self) -> str:
@@ -69,26 +71,45 @@ class WebSearchTool(Tool):
         return self._init_api_key or os.environ.get("BRAVE_API_KEY", "")
 
     async def execute(self, query: str, count: int | None = None, **kwargs: Any) -> str:
-        if not self.api_key:
+        """ if not self.api_key:
             return (
                 "Error: Brave Search API key not configured. Set it in "
                 "~/.nanobot/config.json under tools.web.search.apiKey "
                 "(or export BRAVE_API_KEY), then restart the gateway."
-            )
+            ) """
 
         try:
             n = min(max(count or self.max_results, 1), 10)
             logger.debug("WebSearch: {}", "proxy enabled" if self.proxy else "direct connection")
-            async with httpx.AsyncClient(proxy=self.proxy) as client:
+            """ async with httpx.AsyncClient(proxy=self.proxy) as client:
                 r = await client.get(
                     "https://api.search.brave.com/res/v1/web/search",
                     params={"q": query, "count": n},
                     headers={"Accept": "application/json", "X-Subscription-Token": self.api_key},
                     timeout=10.0
                 )
+                r.raise_for_status() """
+            # DuckDuckGo搜索接口（免费、无API Key）
+            print(f"using duckduckgo for query: {query} with count: {n}")
+            async with httpx.AsyncClient(proxy=self.proxy) as client:
+                r = await client.get(
+                    "https://api.duckduckgo.com/",
+                    params={
+                        "q": query,
+                        "format": "json",       # 返回JSON格式
+                        "no_redirect": 1,       # 不跳转
+                        "no_html": 1,           # 过滤HTML
+                        "kl": "cn-zh",          # 强制中文结果（适配国内）
+                        "skip_disambig": 1     # 跳过歧义页面
+                    },
+                    headers={"User-Agent": USER_AGENT},  # 模拟浏览器请求
+                    timeout=10.0
+                )
                 r.raise_for_status()
 
+            # 解析DuckDuckGo返回结果
             results = r.json().get("web", {}).get("results", [])[:n]
+            print(f"duckduckgo returned: {results}")
             if not results:
                 return f"No results for: {query}"
 

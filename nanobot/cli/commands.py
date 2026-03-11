@@ -217,8 +217,10 @@ def _make_provider(config: Config):
     from nanobot.providers.azure_openai_provider import AzureOpenAIProvider
 
     model = config.agents.defaults.model
+    print(f"Using model: {model}")
     provider_name = config.get_provider_name(model)
     p = config.get_provider(model)
+    print(f"Using model: {model}")
 
     # OpenAI Codex (OAuth)
     if provider_name == "openai_codex" or model.startswith("openai-codex/"):
@@ -252,6 +254,7 @@ def _make_provider(config: Config):
     spec = find_by_name(provider_name)
     if not model.startswith("bedrock/") and not (p and p.api_key) and not (spec and spec.is_oauth):
         console.print("[red]Error: No API key configured.[/red]")
+        console.print("Current provider: [cyan]{}[/cyan]".format(provider_name))
         console.print("Set one in ~/.nanobot/config.json under providers section")
         raise typer.Exit(1)
 
@@ -269,8 +272,10 @@ def _load_runtime_config(config: str | None = None, workspace: str | None = None
     from nanobot.config.loader import load_config, set_config_path
 
     config_path = None
+    print(f"@load_runtime_config")
     if config:
         config_path = Path(config).expanduser().resolve()
+        print(f"Loading config from: {config_path}")
         if not config_path.exists():
             console.print(f"[red]Error: Config file not found: {config_path}[/red]")
             raise typer.Exit(1)
